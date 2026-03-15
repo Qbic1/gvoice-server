@@ -7,11 +7,16 @@ builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
 
 // Configure CORS
+
+var allowedOrigins = builder.Configuration
+    .GetRequiredSection("Cors:AllowedOrigins")
+    .Get<string[]>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngular", policy =>
     {
-        policy.WithOrigins("http://localhost:4200")
+        policy.WithOrigins(allowedOrigins!)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -30,7 +35,6 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseHttpsRedirection();
 app.UseCors("AllowAngular");
 
 app.MapHub<SignalingHub>("/hub/signaling");

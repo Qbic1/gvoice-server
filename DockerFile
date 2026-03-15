@@ -13,8 +13,8 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine
 WORKDIR /app
 COPY --from=build /out .
 
-ENV ASPNETCORE_URLS=http://+:5000
+ENV ASPNETCORE_URLS=http://+:5293
 ENV ASPNETCORE_ENVIRONMENT=Production
 
-EXPOSE 5000
+EXPOSE 5293
 ENTRYPOINT ["dotnet", "GVoice.API.dll"]

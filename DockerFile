@@ -1,6 +1,10 @@
 # ── Build stage ──────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 
+COPY *.sln .
+
+COPY Directory.Packages.props .
+
 COPY GVoice.API/GVoice.API.csproj GVoice.API/
 RUN dotnet restore GVoice.API/GVoice.API.csproj
 

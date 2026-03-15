@@ -1,21 +1,20 @@
 # ── Build stage ──────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
-WORKDIR /app
- 
-COPY *.csproj ./
-RUN dotnet restore
- 
+
+COPY GVoice.API/GVoice.API.csproj GVoice.API/
+RUN dotnet restore GVoice.API/GVoice.API.csproj
+
 COPY . .
+WORKDIR /GVoice.API
 RUN dotnet publish -c Release -o /out
- 
+
 # ── Runtime stage ─────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine
 WORKDIR /app
 COPY --from=build /out .
- 
-# SignalR requires these environment variables
-ENV ASPNETCORE_URLS=http://+:8080
+
+ENV ASPNETCORE_URLS=http://+:5000
 ENV ASPNETCORE_ENVIRONMENT=Production
- 
-EXPOSE 8080
+
+EXPOSE 5000
 ENTRYPOINT ["dotnet", "GVoice.API.dll"]

@@ -1,27 +1,19 @@
+using GVoice.API.Models;
 using Microsoft.AspNetCore.SignalR;
 
 namespace GVoice.API.Hubs;
 
-public class Participant
-{
-    public string ConnectionId { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-    public bool IsMuted { get; set; }
-    public bool IsDeafened { get; set; }
-    public bool IsListenOnly { get; set; }
-}
-
 public class SignalingHub : Hub
 {
-    private static readonly Dictionary<string, Participant> ConnectedParticipants = new();
-    private const int MaxUsers = 6;
+    private static readonly Dictionary<string, Participant> ConnectedParticipants = [];
+    private const int MaxUsers = 10;
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         if (ConnectedParticipants.TryGetValue(Context.ConnectionId, out var participant))
         {
             ConnectedParticipants.Remove(Context.ConnectionId);
-            await Clients.Others.SendAsync("PeerLeft", Context.ConnectionId, participant.DisplayName);
+            await Clients.Others.SendAsync(SignalREvents.PeerLeft, Context.ConnectionId, participant.DisplayName);
         }
         await base.OnDisconnectedAsync(exception);
     }
@@ -30,7 +22,7 @@ public class SignalingHub : Hub
     {
         if (ConnectedParticipants.Count >= MaxUsers)
         {
-            await Clients.Caller.SendAsync("RoomFull");
+            await Clients.Caller.SendAsync(SignalREvents.RoomFull);
             return;
         }
 
@@ -44,19 +36,19 @@ public class SignalingHub : Hub
         ConnectedParticipants[Context.ConnectionId] = participant;
 
         // Notify others about the new participant
-        await Clients.Others.SendAsync("PeerJoined", participant);
+        await Clients.Others.SendAsync(SignalREvents.PeerJoined, participant);
 
         // Send the list of ALL participants (including the caller) to the new user
         var allParticipants = ConnectedParticipants.Values.ToList();
 
-        await Clients.Caller.SendAsync("RoomJoined", allParticipants);
+        await Clients.Caller.SendAsync(SignalREvents.RoomJoined, allParticipants);
     }
 
     public async Task SendSignal(string targetConnectionId, string signal)
     {
         if (ConnectedParticipants.ContainsKey(Context.ConnectionId) && ConnectedParticipants.ContainsKey(targetConnectionId))
         {
-            await Clients.Client(targetConnectionId).SendAsync("ReceiveSignal", Context.ConnectionId, signal);
+            await Clients.Client(targetConnectionId).SendAsync(SignalREvents.ReceiveSignal, Context.ConnectionId, signal);
         }
     }
 
@@ -64,7 +56,7 @@ public class SignalingHub : Hub
     {
         if (ConnectedParticipants.TryGetValue(Context.ConnectionId, out var participant))
         {
-            await Clients.All.SendAsync("ReceiveChatMessage", participant.DisplayName, message, DateTime.UtcNow);
+            await Clients.All.SendAsync(SignalREvents.ReceiveChatMessage, participant.DisplayName, message, DateTime.UtcNow);
         }
     }
 
@@ -74,15 +66,15 @@ public class SignalingHub : Hub
         {
             switch (stateType.ToLower())
             {
-                case "muted":
+                case SignalREvents.Muted:
                     participant.IsMuted = value;
                     break;
-                case "deafened":
+                case SignalREvents.Deafened:
                     participant.IsDeafened = value;
                     break;
             }
             // Broadcast to ALL so the caller also receives the update and refreshes their local UI
-            await Clients.All.SendAsync("PeerStateUpdated", Context.ConnectionId, stateType, value);
+            await Clients.All.SendAsync(SignalREvents.PeerStateUpdated, Context.ConnectionId, stateType, value);
         }
     }
 }

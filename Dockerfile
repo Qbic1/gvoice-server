@@ -17,7 +17,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine
 WORKDIR /app
 COPY --from=build /out .
 
-ENV ASPNETCORE_URLS=http://+:5293
+ENV ASPNETCORE_URLS=http://0.0.0.0:5293
 ENV ASPNETCORE_ENVIRONMENT=Production
 
 EXPOSE 5293

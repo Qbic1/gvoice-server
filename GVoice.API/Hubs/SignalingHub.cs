@@ -45,7 +45,7 @@ public partial class SignalingHub(
 
     public async Task Join(string roomId, string password, string displayName, bool isListenOnly)
     {
-        var room = ValidateRoomJoin(roomId, password);
+        var room = await ValidateRoomJoin(roomId, password);
         if (room is null) return;
 
         displayName = Sanitize(displayName, 20);
@@ -90,12 +90,17 @@ public partial class SignalingHub(
         var sender = participantService.Get(Context.ConnectionId);
 
         if (sender is null)
-        {
             return;
-        }
+
+        var room = roomService.Get(sender.RoomId);
+
+        if (room is null)
+            return;
 
         var sanitized = Sanitize(message);
-        if (string.IsNullOrEmpty(sanitized)) return;
+
+        if (string.IsNullOrEmpty(sanitized))
+            return;
 
         var chatMessage = new ChatMessage
         {
@@ -146,25 +151,25 @@ public partial class SignalingHub(
         await Clients.All.SendAsync("RoomCreated", room);
     }
 
-    private Room? ValidateRoomJoin(string roomId, string password)
+    private async Task<Room?> ValidateRoomJoin(string roomId, string password)
     {
         var room = roomService.Get(roomId);
 
         if (room is null)
         {
-            Clients.Caller.SendAsync(SignalREvents.RoomNotFound);
+            await Clients.Caller.SendAsync(SignalREvents.RoomNotFound);
             return null;
         }
 
         if (!roomService.IsPasswordCorrect(roomId, password))
         {
-            Clients.Caller.SendAsync(SignalREvents.InvalidPassword);
+            await Clients.Caller.SendAsync(SignalREvents.InvalidPassword);
             return null;
         }
 
         if (roomService.IsRoomFull(roomId))
         {
-            Clients.Caller.SendAsync(SignalREvents.RoomFull);
+            await Clients.Caller.SendAsync(SignalREvents.RoomFull);
             return null;
         }
 

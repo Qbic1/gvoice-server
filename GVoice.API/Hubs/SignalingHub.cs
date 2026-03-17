@@ -1,7 +1,6 @@
 using GVoice.API.Models;
 using GVoice.API.Services;
 using Microsoft.AspNetCore.SignalR;
-using System.Collections.Concurrent;
 
 namespace GVoice.API.Hubs;
 
@@ -9,16 +8,20 @@ public partial class SignalingHub(
     ILogger<SignalingHub> logger,
     IConfiguration configuration,
     XmlChatHistoryService chatHistoryService,
-    IRoomService roomService) : Hub
+    IRoomService roomService,
+    IParticipantService participantService) : Hub
 {
-    private static readonly ConcurrentDictionary<string, Participant> Participants = new();
     private readonly string _adminPassword = configuration["AdminPassword"] ?? "default-secret";
     private readonly XmlChatHistoryService _chatHistoryService = chatHistoryService;
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        if (!Participants.TryRemove(Context.ConnectionId, out var participant))
+        var participant = participantService.Remove(Context.ConnectionId);
+
+        if (participant is null)
+        {
             return;
+        }
 
         var room = roomService.Get(participant.RoomId);
 
@@ -55,10 +58,10 @@ public partial class SignalingHub(
             IsListenOnly = isListenOnly
         };
 
-        if (!room.Participants.TryAdd(Context.ConnectionId, participant))
+        if (!roomService.Join(room.Id, participant))
             return;
 
-        Participants[Context.ConnectionId] = participant;
+        participantService.CreateOrUpdate(participant);
 
         await Groups.AddToGroupAsync(Context.ConnectionId, roomId);
 
@@ -67,10 +70,16 @@ public partial class SignalingHub(
 
     public async Task SendSignal(string targetConnectionId, string signal)
     {
-        if (!Participants.TryGetValue(Context.ConnectionId, out var sender) ||
-            !Participants.TryGetValue(targetConnectionId, out var receiver) ||
+        var sender = participantService.Get(Context.ConnectionId);
+
+        var receiver = participantService.Get(targetConnectionId);
+
+        if (sender is null ||
+            receiver is null ||
             sender.RoomId != receiver.RoomId)
+        {
             return;
+        }
 
         await Clients.Client(targetConnectionId)
             .SendAsync(SignalREvents.ReceiveSignal, Context.ConnectionId, signal);
@@ -78,8 +87,12 @@ public partial class SignalingHub(
 
     public async Task SendChatMessage(string message)
     {
-        if (!Participants.TryGetValue(Context.ConnectionId, out var sender))
+        var sender = participantService.Get(Context.ConnectionId);
+
+        if (sender is null)
+        {
             return;
+        }
 
         var sanitized = Sanitize(message);
         if (string.IsNullOrEmpty(sanitized)) return;
@@ -102,15 +115,20 @@ public partial class SignalingHub(
 
     public async Task UpdateState(string stateType, bool value)
     {
-        if (!Participants.TryGetValue(Context.ConnectionId, out var participant))
-            return;
+        var participant = participantService.Get(Context.ConnectionId);
+        if (participant is null) return;
 
-        if (!ApplyState(participant, stateType, value))
-            return;
+        var applied = stateType switch
+        {
+            SignalREvents.Muted => participantService.SetMuted(Context.ConnectionId, value),
+            SignalREvents.Deafened => participantService.SetDeafened(Context.ConnectionId, value),
+            _ => false
+        };
+
+        if (!applied) return;
 
         await Clients.Group(participant.RoomId)
-            .SendAsync(SignalREvents.PeerStateUpdated,
-                Context.ConnectionId, stateType, value);
+            .SendAsync(SignalREvents.PeerStateUpdated, Context.ConnectionId, stateType, value);
     }
 
     public async Task CreateRoom(string adminPassword, string roomName, string roomPassword)
@@ -173,15 +191,5 @@ public partial class SignalingHub(
     {
         var value = System.Net.WebUtility.HtmlEncode(input?.Trim() ?? "");
         return value.Length > maxLength ? value[..maxLength] : value;
-    }
-
-    private static bool ApplyState(Participant participant, string stateType, bool value)
-    {
-        return stateType switch
-        {
-            SignalREvents.Muted => (participant.IsMuted = value) == value,
-            SignalREvents.Deafened => (participant.IsDeafened = value) == value,
-            _ => false
-        };
     }
 }

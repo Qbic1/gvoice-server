@@ -9,4 +9,5 @@ public interface IRoomService
     bool IsPasswordCorrect(string roomId, string password);
     bool IsRoomFull(string roomId);
     Room Create(string name, string password);
+    bool Join(string roomId, Participant participant);
 }

@@ -40,14 +40,24 @@ internal class RoomService : IRoomService
 
     public bool IsPasswordCorrect(string roomId, string password)
     {
-        Rooms.TryGetValue(roomId, out var room);
+        var room = Get(roomId);
         return room?.Password == password;
     }
 
     public bool IsRoomFull(string roomId)
     {
-        Rooms.TryGetValue(roomId, out var room);
+        var room = Get(roomId);
         return room?.Participants.Count >= MaxUsersPerRoom;
+    }
+
+    public bool Join(string roomId, Participant participant)
+    {
+        var room = Get(roomId);
+
+        if(room is null)
+            return false;
+
+        return room.Participants.TryAdd(participant.ConnectionId, participant);
     }
 
     private static Room CreateRoomInternal(string roomName, string password)

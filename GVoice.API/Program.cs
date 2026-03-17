@@ -9,6 +9,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<XmlChatHistoryService>();
 builder.Services.AddSingleton<IRoomService, RoomService>();
+builder.Services.AddSingleton<IParticipantService, ParticipantService>();
 
 // Configure CORS
 

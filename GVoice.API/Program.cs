@@ -1,10 +1,12 @@
 using GVoice.API.Hubs;
+using GVoice.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<XmlChatHistoryService>();
 
 // Configure CORS
 
@@ -37,6 +39,16 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("AllowAngular");
 
+app.MapGet("/rooms", () => SignalingHub.GetRooms());
+
+app.MapPost("/admin/verify", (AdminVerifyRequest request, IConfiguration config) =>
+{
+    var adminPassword = config["AdminPassword"];
+    return request.Password == adminPassword ? Results.Ok() : Results.Unauthorized();
+});
+
 app.MapHub<SignalingHub>("/hub/signaling");
 
 app.Run();
+
+public record AdminVerifyRequest(string Password);

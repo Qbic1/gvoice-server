@@ -5,69 +5,47 @@ using System.Collections.Concurrent;
 
 namespace GVoice.API.Hubs;
 
-public class SignalingHub(
-    ILogger<SignalingHub> logger, 
+public partial class SignalingHub(
+    ILogger<SignalingHub> logger,
     IConfiguration configuration,
-    XmlChatHistoryService chatHistoryService
-    ) : Hub
+    XmlChatHistoryService chatHistoryService,
+    IRoomService roomService) : Hub
 {
-    private static readonly ConcurrentDictionary<string, Room> Rooms = new();
-    private const int MaxUsersPerRoom = 10;
-    private readonly ILogger<SignalingHub> _logger = logger;
+    private static readonly ConcurrentDictionary<string, Participant> Participants = new();
     private readonly string _adminPassword = configuration["AdminPassword"] ?? "default-secret";
     private readonly XmlChatHistoryService _chatHistoryService = chatHistoryService;
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        string? targetRoomId = null;
-        Participant? participant = null;
+        if (!Participants.TryRemove(Context.ConnectionId, out var participant))
+            return;
 
-        foreach (var room in Rooms.Values)
+        var room = roomService.Get(participant.RoomId);
+
+        if (room is null)
         {
-            if (room.Participants.TryRemove(Context.ConnectionId, out participant))
-            {
-                targetRoomId = room.Id;
-                break;
-            }
+            return;
         }
 
-        if (targetRoomId != null && participant != null)
-        {
-            _logger.LogInformation("Participant {DisplayName} left room {RoomId}.", 
-                participant.DisplayName, targetRoomId);
-            
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, targetRoomId);
-            await Clients.Group(targetRoomId).SendAsync(SignalREvents.PeerLeft, Context.ConnectionId, participant.DisplayName);
-        }
+        room.Participants.TryRemove(Context.ConnectionId, out _);
+
+        logger.LogInformation("Participant {Name} left room {RoomId}",
+            participant.DisplayName, participant.RoomId);
+
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, participant.RoomId);
+
+        await Clients.Group(participant.RoomId)
+            .SendAsync(SignalREvents.PeerLeft, Context.ConnectionId, participant.DisplayName);
 
         await base.OnDisconnectedAsync(exception);
     }
 
-    public async Task Join(string roomId, string roomPassword, string displayName, bool isListenOnly)
+    public async Task Join(string roomId, string password, string displayName, bool isListenOnly)
     {
-        if (string.IsNullOrEmpty(roomId) || !Rooms.TryGetValue(roomId, out var room))
-        {
-            _logger.LogWarning("Join failed: Room {RoomId} does not exist or is invalid.", roomId);
-            await Clients.Caller.SendAsync(SignalREvents.RoomNotFound);
-            return;
-        }
+        var room = ValidateRoomJoin(roomId, password);
+        if (room is null) return;
 
-        if (string.IsNullOrEmpty(roomPassword) || room.Password != roomPassword)
-        {
-            _logger.LogWarning("Join failed: Incorrect or missing password for room {RoomId}.", roomId);
-            await Clients.Caller.SendAsync(SignalREvents.InvalidPassword);
-            return;
-        }
-        if (room.Participants.Count >= MaxUsersPerRoom)
-        {
-            _logger.LogWarning("Join failed: Room {RoomId} is full.", roomId);
-            await Clients.Caller.SendAsync(SignalREvents.RoomFull);
-            return;
-        }
-
-        // Basic XSS/Input Validation
-        displayName = System.Net.WebUtility.HtmlEncode(displayName?.Trim() ?? "Anonymous");
-        if (displayName.Length > 20) displayName = displayName[..20];
+        displayName = Sanitize(displayName, 20);
 
         var participant = new Participant
         {
@@ -77,117 +55,133 @@ public class SignalingHub(
             IsListenOnly = isListenOnly
         };
 
-        if (room.Participants.TryAdd(Context.ConnectionId, participant))
+        if (!room.Participants.TryAdd(Context.ConnectionId, participant))
+            return;
+
+        Participants[Context.ConnectionId] = participant;
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, roomId);
+
+        await SendJoinData(room, participant);
+    }
+
+    public async Task SendSignal(string targetConnectionId, string signal)
+    {
+        if (!Participants.TryGetValue(Context.ConnectionId, out var sender) ||
+            !Participants.TryGetValue(targetConnectionId, out var receiver) ||
+            sender.RoomId != receiver.RoomId)
+            return;
+
+        await Clients.Client(targetConnectionId)
+            .SendAsync(SignalREvents.ReceiveSignal, Context.ConnectionId, signal);
+    }
+
+    public async Task SendChatMessage(string message)
+    {
+        if (!Participants.TryGetValue(Context.ConnectionId, out var sender))
+            return;
+
+        var sanitized = Sanitize(message);
+        if (string.IsNullOrEmpty(sanitized)) return;
+
+        var chatMessage = new ChatMessage
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, roomId);
-            _logger.LogInformation("Participant {DisplayName} joined room {RoomId}.", displayName, roomId);
+            DisplayName = sender.DisplayName,
+            Message = sanitized,
+            Timestamp = DateTime.UtcNow
+        };
 
-            // Send history before announcing the join
-            var history = await _chatHistoryService.ReadHistoryAsync(roomId);
-            await Clients.Caller.SendAsync(SignalREvents.ReceiveChatHistory, history);
+        await _chatHistoryService.WriteMessageAsync(sender.RoomId, chatMessage);
 
-            await Clients.OthersInGroup(roomId).SendAsync(SignalREvents.PeerJoined, participant);
-            var allInRoom = room.Participants.Values.ToList();
-            await Clients.Caller.SendAsync(SignalREvents.RoomJoined, new { room.Name, Participants = allInRoom });
-        }
+        await Clients.Group(sender.RoomId)
+            .SendAsync(SignalREvents.ReceiveChatMessage,
+                chatMessage.DisplayName,
+                chatMessage.Message,
+                chatMessage.Timestamp);
+    }
+
+    public async Task UpdateState(string stateType, bool value)
+    {
+        if (!Participants.TryGetValue(Context.ConnectionId, out var participant))
+            return;
+
+        if (!ApplyState(participant, stateType, value))
+            return;
+
+        await Clients.Group(participant.RoomId)
+            .SendAsync(SignalREvents.PeerStateUpdated,
+                Context.ConnectionId, stateType, value);
     }
 
     public async Task CreateRoom(string adminPassword, string roomName, string roomPassword)
     {
         if (adminPassword != _adminPassword)
         {
-            _logger.LogWarning("CreateRoom failed: Invalid Admin Password.");
+            logger.LogWarning("Invalid admin password");
             return;
         }
 
-        var roomId = Slugify(roomName) + "-" + Guid.NewGuid().ToString("n").Substring(0, 4);
-        var newRoom = new Room
+        var room = roomService.Create(roomName, roomPassword);
+
+        logger.LogInformation("Room created: {RoomId}", room.Id);
+
+        await Clients.All.SendAsync("RoomCreated", room);
+    }
+
+    private Room? ValidateRoomJoin(string roomId, string password)
+    {
+        var room = roomService.Get(roomId);
+
+        if (room is null)
         {
-            Id = roomId,
-            Name = roomName,
-            Password = roomPassword
+            Clients.Caller.SendAsync(SignalREvents.RoomNotFound);
+            return null;
+        }
+
+        if (!roomService.IsPasswordCorrect(roomId, password))
+        {
+            Clients.Caller.SendAsync(SignalREvents.InvalidPassword);
+            return null;
+        }
+
+        if (roomService.IsRoomFull(roomId))
+        {
+            Clients.Caller.SendAsync(SignalREvents.RoomFull);
+            return null;
+        }
+
+        return room;
+    }
+
+    private async Task SendJoinData(Room room, Participant participant)
+    {
+        var history = await _chatHistoryService.ReadHistoryAsync(room.Id);
+
+        await Clients.Caller.SendAsync(SignalREvents.ReceiveChatHistory, history);
+
+        await Clients.OthersInGroup(room.Id)
+            .SendAsync(SignalREvents.PeerJoined, participant);
+
+        await Clients.Caller.SendAsync(SignalREvents.RoomJoined, new
+        {
+            room.Name,
+            Participants = room.Participants.Values.ToList()
+        });
+    }
+
+    private static string Sanitize(string? input, int maxLength = int.MaxValue)
+    {
+        var value = System.Net.WebUtility.HtmlEncode(input?.Trim() ?? "");
+        return value.Length > maxLength ? value[..maxLength] : value;
+    }
+
+    private static bool ApplyState(Participant participant, string stateType, bool value)
+    {
+        return stateType switch
+        {
+            SignalREvents.Muted => (participant.IsMuted = value) == value,
+            SignalREvents.Deafened => (participant.IsDeafened = value) == value,
+            _ => false
         };
-
-        if (Rooms.TryAdd(roomId, newRoom))
-        {
-            _logger.LogInformation("New room created: {RoomName} ({RoomId}).", roomName, roomId);
-            await Clients.All.SendAsync("RoomCreated", new { Id = roomId, Name = roomName });
-        }
-    }
-
-    public static List<object> GetRooms()
-    {
-        return Rooms.Values.Select(r => new { r.Id, r.Name, ParticipantCount = r.Participants.Count }).Cast<object>().ToList();
-    }
-
-    public async Task SendSignal(string targetConnectionId, string signal)
-    {
-        var sender = FindParticipant(Context.ConnectionId);
-        var receiver = FindParticipant(targetConnectionId);
-
-        if (sender != null && receiver != null && sender.RoomId == receiver.RoomId)
-        {
-            await Clients.Client(targetConnectionId).SendAsync(SignalREvents.ReceiveSignal, Context.ConnectionId, signal);
-        }
-    }
-
-    public async Task SendChatMessage(string message)
-    {
-        var sender = FindParticipant(Context.ConnectionId);
-        if (sender != null)
-        {
-            var sanitizedMessage = System.Net.WebUtility.HtmlEncode(message?.Trim() ?? string.Empty);
-            if (string.IsNullOrEmpty(sanitizedMessage)) return;
-
-            var chatMessage = new ChatMessage
-            {
-                DisplayName = sender.DisplayName,
-                Message = sanitizedMessage,
-                Timestamp = DateTime.UtcNow
-            };
-
-            await _chatHistoryService.WriteMessageAsync(sender.RoomId, chatMessage);
-
-            await Clients.Group(sender.RoomId).SendAsync(SignalREvents.ReceiveChatMessage, chatMessage.DisplayName, chatMessage.Message, chatMessage.Timestamp);
-        }
-    }
-
-    public async Task UpdateState(string stateType, bool value)
-    {
-        var participant = FindParticipant(Context.ConnectionId);
-        if (participant != null)
-        {
-            switch (stateType.ToLower())
-            {
-                case SignalREvents.Muted:
-                    participant.IsMuted = value;
-                    break;
-                case SignalREvents.Deafened:
-                    participant.IsDeafened = value;
-                    break;
-            }
-            await Clients.Group(participant.RoomId).SendAsync(SignalREvents.PeerStateUpdated, Context.ConnectionId, stateType, value);
-        }
-    }
-
-    private Participant? FindParticipant(string connectionId)
-    {
-        foreach (var room in Rooms.Values)
-        {
-            if (room.Participants.TryGetValue(connectionId, out var participant))
-            {
-                return participant;
-            }
-        }
-        return null;
-    }
-
-    private static string Slugify(string phrase)
-    {
-        var str = phrase.ToLower();
-        str = System.Text.RegularExpressions.Regex.Replace(str, @"[^a-z0-9\s-]", "");
-        str = System.Text.RegularExpressions.Regex.Replace(str, @"\s+", " ").Trim();
-        str = System.Text.RegularExpressions.Regex.Replace(str, @"\s", "-");
-        return str;
     }
 }

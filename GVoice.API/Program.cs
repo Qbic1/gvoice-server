@@ -1,5 +1,6 @@
 using GVoice.API.Hubs;
 using GVoice.API.Services;
+using GVoice.API.Services.Implementations;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<XmlChatHistoryService>();
+builder.Services.AddSingleton<IRoomService, RoomService>();
 
 // Configure CORS
 
@@ -39,7 +41,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("AllowAngular");
 
-app.MapGet("/rooms", () => SignalingHub.GetRooms());
+app.MapGet("/rooms", (IRoomService roomService) => roomService.Get().Select(r => new { r.Id, r.Name, ParticipantCount = r.Participants.Count }));
 
 app.MapPost("/admin/verify", (AdminVerifyRequest request, IConfiguration config) =>
 {

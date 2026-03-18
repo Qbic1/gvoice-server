@@ -13,7 +13,7 @@ public class XmlChatHistoryService
     public XmlChatHistoryService(IConfiguration configuration)
     {
         // Using a configurable path is better than hardcoding.
-        _historyPath = configuration["ChatHistoryPath"] ?? "\\chat-history";
+        _historyPath = configuration["ChatHistoryPath"] ?? "chat-history";
         Directory.CreateDirectory(_historyPath);
     }
 

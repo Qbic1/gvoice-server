@@ -44,4 +44,13 @@ internal class ParticipantService : IParticipantService
         participant.IsDeafened = value;
         return true;
     }
+
+    public bool SetAudioSettings(string connectionId, AudioSettings settings)
+    {
+        var participant = Get(connectionId);
+        if (participant is null) return false;
+
+        participant.AudioSettings = settings;
+        return true;
+    }
 }

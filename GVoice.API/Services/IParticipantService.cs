@@ -9,4 +9,5 @@ public interface IParticipantService
     Participant? Remove(string connectionId);
     bool SetMuted(string connectionId, bool value);
     bool SetDeafened(string connectionId, bool value);
+    bool SetAudioSettings(string connectionId, AudioSettings settings);
 }

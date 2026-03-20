@@ -136,6 +136,18 @@ public partial class SignalingHub(
             .SendAsync(SignalREvents.PeerStateUpdated, Context.ConnectionId, stateType, value);
     }
 
+    public async Task UpdateAudioSettings(AudioSettings settings)
+    {
+        var participant = participantService.Get(Context.ConnectionId);
+        if (participant is null) return;
+
+        if (!participantService.SetAudioSettings(Context.ConnectionId, settings))
+            return;
+
+        await Clients.Group(participant.RoomId)
+            .SendAsync(SignalREvents.AudioSettingsUpdated, Context.ConnectionId, settings);
+    }
+
     public async Task CreateRoom(string adminPassword, string roomName, string roomPassword)
     {
         if (adminPassword != _adminPassword)

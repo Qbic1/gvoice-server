@@ -127,6 +127,7 @@ public partial class SignalingHub(
         {
             SignalREvents.Muted => participantService.SetMuted(Context.ConnectionId, value),
             SignalREvents.Deafened => participantService.SetDeafened(Context.ConnectionId, value),
+            SignalREvents.SharingScreen => participantService.SetSharingScreen(Context.ConnectionId, value),
             _ => false
         };
 

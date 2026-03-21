@@ -163,7 +163,11 @@ layer is needed.
   Theme System    8 built-in themes (Purple, Ocean,  P2             In scope
                   Rose, Amber + Dark variants)                      
                   using semantic CSS tokens. Persistent             
-                  to localStorage via ThemeService.                                          
+                  to localStorage via ThemeService.                 
+
+  Screen Sharing  Users can share their screen (video)  P2             In scope
+                  with all other participants in the                
+                  room. Large overlay for viewing.                                           
   --------------- ---------------------------------- -------------- -------------
 
 5\. Technical Architecture

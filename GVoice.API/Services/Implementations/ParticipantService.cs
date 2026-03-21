@@ -51,6 +51,18 @@ internal class ParticipantService : IParticipantService
         return true;
     }
 
+    public bool SetSharingScreen(string connectionId, bool value)
+    {
+        if (!Participants.TryGetValue(connectionId, out var participant))
+            return false;
+
+        lock (participant)
+        {
+            participant.IsSharingScreen = value;
+        }
+        return true;
+    }
+
     public bool SetAudioSettings(string connectionId, AudioSettings settings)
     {
         if (!Participants.TryGetValue(connectionId, out var participant))

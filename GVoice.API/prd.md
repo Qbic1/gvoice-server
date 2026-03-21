@@ -156,9 +156,14 @@ layer is needed.
                   Others see a deafened indicator on                
                   that user's card.                                 
 
-  Configurable    Settings modal (triggered from top P2             In scope
+  Configurable    Settings modal (triggered from top P2            In scope
   PTT key         bar) allows rebinding the PTT key                 
                   from Spacebar to any key.                         
+
+  Theme System    8 built-in themes (Purple, Ocean,  P2             In scope
+                  Rose, Amber + Dark variants)                      
+                  using semantic CSS tokens. Persistent             
+                  to localStorage via ThemeService.                                          
   --------------- ---------------------------------- -------------- -------------
 
 5\. Technical Architecture
@@ -168,8 +173,9 @@ layer is needed.
   ------------------ ----------------------------------------------------
   **Layer**          **Technology**
 
-  Frontend           Angular 17+ (standalone components) + TypeScript +
-                     Vite build. Tailwind CSS for styling.
+  Frontend           Angular 21 (standalone components) + TypeScript +
+                     Vite build. CSS Variables / Semantic Tokens for 
+                     styling (Themeable).
 
   Voice transport    WebRTC P2P mesh --- sufficient for up to 6 users. No
                      SFU in v1.
@@ -223,6 +229,11 @@ injectable singletons:
                        session. Receives messages from SignalRService and
                        exposes them to the chat panel component. Clears
                        state on disconnect.
+
+  ThemeService         Manages reactive theme state using Angular Signals.
+                       Persists preference to localStorage and applies
+                       data-theme attributes to the document root.
+                       Eagerly initialized via APP_INITIALIZER.
   -------------------- ----------------------------------------------------
 
 5.3 Key Technical Decisions
@@ -300,22 +311,28 @@ Three containers, brought up with a single docker compose up -d:
 
 7.1 Design Direction
 
-Minimal and utilitarian. Functionality over decoration. Monochrome
-palette with subtle accent colours for state indicators (speaking,
-muted, deafened, listen-only). No gradients, no illustrations. Dense but
-readable.
+Modern and utilitarian. Functionality over decoration. Semantic token-based
+theme system with 8 light/dark presets (Purple, Ocean, Rose, Amber, etc.).
+Consistent use of CSS variables for all colors, ensuring accessibility and
+visual coherence across all themes.
 
 7.2 Layout
+
+-   Lobby: Brand lockup with room cards (avatars, capacity, join buttons).
+    Redesigned for mobile as a bottom-sheet-style modal.
 
 -   Top bar: room name, own mic toggle, PTT toggle, deafen button,
     settings button, disconnect/leave button.
 
--   Left / main panel: participant list with name card, mute icon,
-    speaking ring, deafen indicator, listen-only badge per user (max 6
-    cards).
+-   Left / main panel (Desktop): participant list with name card, mute icon,
+    speaking ring, deafen indicator, listen-only badge per user.
 
--   Right panel: text chat with scrollable message history and input
-    field at the bottom.
+-   Right panel (Desktop): text chat with scrollable message history and input
+    field.
+
+-   Mobile Layout: Dedicated bottom navigation bar (Room / Chat / Settings).
+    Layouts use dvh units for height stability. Settings appear inline
+    without keyboard-specific controls.
 
 7.3 Joining Flow
 
@@ -372,10 +389,17 @@ readable.
 
 -   Triggered by the settings button in the top bar.
 
--   Contains: PTT key rebinding control (press any key to capture).
+-   Tabbed Layout:
+    -   Theme: 4-column compact grid for selecting light/dark themes.
+    -   Audio: Live input level canvas meter, noise gate sensitivity,
+        audio enhancement toggles.
+    -   Controls: PTT key rebinding (keyboard-style badge).
 
--   Modal overlays the full UI; dismissible via close button or Escape
-    key.
+-   Mobile-specific: 'hideControls' input suppresses the Controls tab
+    when used inline on mobile.
+
+-   Modal overlays the full UI; dismissible via 'Done' button or Escape
+    key. Includes a danger-soft 'Reset' button.
 
 7.7 Disconnect Handling
 
@@ -484,7 +508,7 @@ interview:
   **Visual design**     Minimal / utilitarian. Monochrome with functional
                         accent colours.
 
-  **Frontend            Angular 17+ standalone components + TypeScript +
+  **Frontend            Angular 21 standalone components + TypeScript +
   framework**           Tailwind CSS.
 
   **Signaling backend** ASP.NET Core minimal APIs + SignalR.

@@ -29,28 +29,37 @@ internal class ParticipantService : IParticipantService
 
     public bool SetMuted(string connectionId, bool value)
     {
-        var participant = Get(connectionId);
-        if (participant is null) return false;
+        if (!Participants.TryGetValue(connectionId, out var participant))
+            return false;
 
-        participant.IsMuted = value;
+        lock (participant)
+        {
+            participant.IsMuted = value;
+        }
         return true;
     }
 
     public bool SetDeafened(string connectionId, bool value)
     {
-        var participant = Get(connectionId);
-        if (participant is null) return false;
+        if (!Participants.TryGetValue(connectionId, out var participant))
+            return false;
 
-        participant.IsDeafened = value;
+        lock (participant)
+        {
+            participant.IsDeafened = value;
+        }
         return true;
     }
 
     public bool SetAudioSettings(string connectionId, AudioSettings settings)
     {
-        var participant = Get(connectionId);
-        if (participant is null) return false;
+        if (!Participants.TryGetValue(connectionId, out var participant))
+            return false;
 
-        participant.AudioSettings = settings;
+        lock (participant)
+        {
+            participant.AudioSettings = settings;
+        }
         return true;
     }
 }

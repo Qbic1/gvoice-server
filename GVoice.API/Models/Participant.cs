@@ -8,6 +8,7 @@ public class Participant
     public bool IsMuted { get; set; }
     public bool IsDeafened { get; set; }
     public bool IsListenOnly { get; set; }
+    public bool IsSharingScreen { get; set; }
     public AudioSettings AudioSettings { get; set; } = new();
 }
 

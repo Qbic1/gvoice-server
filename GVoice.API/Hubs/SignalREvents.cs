@@ -25,5 +25,6 @@ public static class SignalREvents
     // State Types
     public const string Muted = "muted";
     public const string Deafened = "deafened";
+    public const string SharingScreen = "sharingScreen";
     public const string AudioSettings = "audioSettings";
 }

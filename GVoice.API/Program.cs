@@ -47,6 +47,8 @@ app.UseCors("AllowAngular");
 
 app.MapGet("/rooms", (IRoomService roomService) => roomService.Get().Select(r => new { r.Id, r.Name, ParticipantCount = r.Participants.Count }));
 
+app.MapGet("/rooms/{roomId}/participants", (string roomId, IRoomService roomService) => Results.Ok(roomService.GetParticipants(roomId)));
+
 app.MapPost("/admin/verify", (AdminVerifyRequest request, IConfiguration config) =>
 {
     var adminPassword = config["AdminPassword"];

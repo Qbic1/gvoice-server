@@ -60,6 +60,13 @@ internal class RoomService : IRoomService
         return room.Participants.TryAdd(participant.ConnectionId, participant);
     }
 
+    public IEnumerable<string> GetParticipants(string roomId)
+    {
+        var room = Get(roomId);
+        if (room is null) return [];
+        return room.Participants.Values.Select(p => p.DisplayName);
+    }
+
     private static Room CreateRoomInternal(string roomName, string password)
     {
         var postfix = Guid.NewGuid().ToString("n")[..4];

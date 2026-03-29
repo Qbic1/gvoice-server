@@ -10,4 +10,5 @@ public interface IRoomService
     bool IsRoomFull(string roomId);
     Room Create(string name, string password);
     bool Join(string roomId, Participant participant);
+    IEnumerable<string> GetParticipants(string roomId);
 }

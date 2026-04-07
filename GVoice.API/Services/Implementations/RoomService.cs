@@ -69,8 +69,7 @@ internal class RoomService : IRoomService
 
     private static Room CreateRoomInternal(string roomName, string password)
     {
-        var postfix = Guid.NewGuid().ToString("n")[..4];
-        var roomId = $"{Slugify(roomName)}-{postfix}";
+        var roomId = Slugify(roomName);
 
         var room = new Room
         {

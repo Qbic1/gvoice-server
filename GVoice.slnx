@@ -1,3 +1,4 @@
 <Solution>
   <Project DefaultStartup="true" Path="GVoice.API/GVoice.API.csproj" />
+  <Project Path="GVoice.Tests/GVoice.Tests.csproj" />
 </Solution>

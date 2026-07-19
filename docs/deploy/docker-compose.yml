@@ -1,0 +1,49 @@
+# Reference docker-compose for the deploy root. See ../deployment.md for the full
+# directory layout and step-by-step instructions.
+#
+# Directory layout expected by this file:
+#   deploy-root/
+#   ├── docker-compose.yml   (this file)
+#   ├── Dockerfile           (builds Angular client + Caddy image; context .)
+#   ├── Caddyfile
+#   ├── certs/               (certificate_fullchain.crt, certificate.key)
+#   ├── client/              (gvoice-client checkout — environment.ts TURN creds set!)
+#   └── server/              (gvoice-server checkout — has its own Dockerfile)
+
+services:
+  caddy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/etc/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  api:
+    build: ./server
+    expose:
+      - "5293"
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_URLS=http://0.0.0.0:5293
+      - ASPNETCORE_HOSTFILTERING_ALLOWEDHOSTS=*
+      # SECURITY: override the admin password here (never rely on the appsettings.json default).
+      - AdminPassword=${GVOICE_ADMIN_PASSWORD:?set GVOICE_ADMIN_PASSWORD in .env}
+      # Persist chat history to a named volume so it survives container recreation.
+      - ChatHistoryPath=/data/chat-history
+    volumes:
+      - chat_history:/data/chat-history
+
+volumes:
+  caddy_data:
+  caddy_config:
+  chat_history:

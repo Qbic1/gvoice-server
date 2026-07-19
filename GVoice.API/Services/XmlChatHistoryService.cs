@@ -33,7 +33,16 @@ public class XmlChatHistoryService
             XDocument doc;
             if (File.Exists(filePath))
             {
-                doc = XDocument.Load(filePath);
+                try
+                {
+                    doc = XDocument.Load(filePath);
+                }
+                catch
+                {
+                    // Corrupt history file: start fresh so a one-time corruption
+                    // doesn't permanently break chat for this room.
+                    doc = new XDocument(new XElement("ChatHistory"));
+                }
             }
             else
             {

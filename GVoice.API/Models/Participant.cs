@@ -9,11 +9,4 @@ public class Participant
     public bool IsDeafened { get; set; }
     public bool IsListenOnly { get; set; }
     public bool IsSharingScreen { get; set; }
-    public AudioSettings AudioSettings { get; set; } = new();
-}
-
-public class AudioSettings
-{
-    public bool EnableEnhancement { get; set; } = true;
-    public double GateSensitivity { get; set; } = 0.02;
 }

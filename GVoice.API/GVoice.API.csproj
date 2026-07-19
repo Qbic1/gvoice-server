@@ -11,4 +11,9 @@
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Expose internal services (RoomService, ParticipantService) to the test project. -->
+    <InternalsVisibleTo Include="GVoice.Tests" />
+  </ItemGroup>
+
 </Project>

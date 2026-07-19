@@ -69,17 +69,26 @@ internal class RoomService : IRoomService
 
     private static Room CreateRoomInternal(string roomName, string password)
     {
-        var roomId = Slugify(roomName);
+        var baseId = Slugify(roomName);
 
-        var room = new Room
+        // Guarantee a unique, non-empty id: append a numeric suffix on collision
+        // instead of throwing. Loops to stay correct under concurrent creates.
+        var roomId = baseId;
+        Room room;
+        for (var suffix = 2; ; suffix++)
         {
-            Id = roomId,
-            Name = roomName,
-            Password = password
-        };
+            room = new Room
+            {
+                Id = roomId,
+                Name = roomName,
+                Password = password
+            };
 
-        if (!Rooms.TryAdd(roomId, room))
-            throw new Exception("Cant create room");
+            if (Rooms.TryAdd(roomId, room))
+                break;
+
+            roomId = $"{baseId}-{suffix}";
+        }
 
         return room;
     }
@@ -89,10 +98,12 @@ internal class RoomService : IRoomService
         if (string.IsNullOrWhiteSpace(value))
             return "room";
 
-        return string.Join("-",
+        var slug = string.Join("-",
             value.ToLowerInvariant()
                  .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                  .Select(x => new string([.. x.Where(char.IsLetterOrDigit)]))
                  .Where(x => x.Length > 0));
+
+        return string.IsNullOrEmpty(slug) ? "room" : slug;
     }
 }

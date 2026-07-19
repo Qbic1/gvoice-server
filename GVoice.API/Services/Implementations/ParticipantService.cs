@@ -62,16 +62,4 @@ internal class ParticipantService : IParticipantService
         }
         return true;
     }
-
-    public bool SetAudioSettings(string connectionId, AudioSettings settings)
-    {
-        if (!Participants.TryGetValue(connectionId, out var participant))
-            return false;
-
-        lock (participant)
-        {
-            participant.AudioSettings = settings;
-        }
-        return true;
-    }
 }

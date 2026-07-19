@@ -16,7 +16,13 @@ public partial class SignalingHub(
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var participant = participantService.Remove(Context.ConnectionId);
+        await LeaveCurrentRoomAsync(Context.ConnectionId);
+        await base.OnDisconnectedAsync(exception);
+    }
+
+    private async Task LeaveCurrentRoomAsync(string connectionId)
+    {
+        var participant = participantService.Remove(connectionId);
 
         if (participant is null)
         {
@@ -24,29 +30,28 @@ public partial class SignalingHub(
         }
 
         var room = roomService.Get(participant.RoomId);
-
-        if (room is null)
-        {
-            return;
-        }
-
-        room.Participants.TryRemove(Context.ConnectionId, out _);
+        room?.Participants.TryRemove(connectionId, out _);
 
         logger.LogInformation("Participant {Name} left room {RoomId}",
             participant.DisplayName, participant.RoomId);
 
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, participant.RoomId);
+        await Groups.RemoveFromGroupAsync(connectionId, participant.RoomId);
 
         await Clients.Group(participant.RoomId)
-            .SendAsync(SignalREvents.PeerLeft, Context.ConnectionId, participant.DisplayName);
-
-        await base.OnDisconnectedAsync(exception);
+            .SendAsync(SignalREvents.PeerLeft, connectionId, participant.DisplayName);
     }
 
     public async Task Join(string roomId, string password, string displayName, bool isListenOnly)
     {
         var room = await ValidateRoomJoin(roomId, password);
         if (room is null) return;
+
+        // Clean up any previous room membership on this connection so the
+        // participant is never left as a ghost in another room / SignalR group.
+        if (participantService.Get(Context.ConnectionId) is not null)
+        {
+            await LeaveCurrentRoomAsync(Context.ConnectionId);
+        }
 
         displayName = Sanitize(displayName, 20);
 
@@ -59,7 +64,12 @@ public partial class SignalingHub(
         };
 
         if (!roomService.Join(room.Id, participant))
+        {
+            logger.LogWarning("Join failed for {ConnectionId} in room {RoomId}",
+                Context.ConnectionId, room.Id);
+            await Clients.Caller.SendAsync(SignalREvents.JoinFailed);
             return;
+        }
 
         participantService.CreateOrUpdate(participant);
 
@@ -137,18 +147,6 @@ public partial class SignalingHub(
             .SendAsync(SignalREvents.PeerStateUpdated, Context.ConnectionId, stateType, value);
     }
 
-    public async Task UpdateAudioSettings(AudioSettings settings)
-    {
-        var participant = participantService.Get(Context.ConnectionId);
-        if (participant is null) return;
-
-        if (!participantService.SetAudioSettings(Context.ConnectionId, settings))
-            return;
-
-        await Clients.Group(participant.RoomId)
-            .SendAsync(SignalREvents.AudioSettingsUpdated, Context.ConnectionId, settings);
-    }
-
     public async Task CreateRoom(string adminPassword, string roomName, string roomPassword)
     {
         if (adminPassword != _adminPassword)
@@ -161,7 +159,9 @@ public partial class SignalingHub(
 
         logger.LogInformation("Room created: {RoomId}", room.Id);
 
-        await Clients.All.SendAsync("RoomCreated", room);
+        // SECURITY: never broadcast the full Room object — it carries the plaintext
+        // Password (and participant list). Clients only need id + name for the lobby.
+        await Clients.All.SendAsync(SignalREvents.RoomCreated, new { room.Id, room.Name });
     }
 
     private async Task<Room?> ValidateRoomJoin(string roomId, string password)

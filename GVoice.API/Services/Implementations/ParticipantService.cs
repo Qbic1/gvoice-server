@@ -62,4 +62,16 @@ internal class ParticipantService : IParticipantService
         }
         return true;
     }
+
+    public bool SetAvatar(string connectionId, string value)
+    {
+        if (!Participants.TryGetValue(connectionId, out var participant))
+            return false;
+
+        lock (participant)
+        {
+            participant.Avatar = value;
+        }
+        return true;
+    }
 }

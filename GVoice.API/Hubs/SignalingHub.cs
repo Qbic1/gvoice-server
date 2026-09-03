@@ -41,7 +41,7 @@ public partial class SignalingHub(
             .SendAsync(SignalREvents.PeerLeft, connectionId, participant.DisplayName);
     }
 
-    public async Task Join(string roomId, string password, string displayName, bool isListenOnly)
+    public async Task Join(string roomId, string password, string displayName, bool isListenOnly, string avatar = "")
     {
         var room = await ValidateRoomJoin(roomId, password);
         if (room is null) return;
@@ -60,7 +60,8 @@ public partial class SignalingHub(
             ConnectionId = Context.ConnectionId,
             RoomId = roomId,
             DisplayName = displayName,
-            IsListenOnly = isListenOnly
+            IsListenOnly = isListenOnly,
+            Avatar = NormalizeAvatar(avatar)
         };
 
         if (!roomService.Join(room.Id, participant))
@@ -204,6 +205,34 @@ public partial class SignalingHub(
             Participants = room.Participants.Values.ToList()
         });
     }
+
+    // Avatar rides its own method rather than UpdateState: that hub method is
+    // typed (string, bool) and its switch drops unknown keys, so a string-valued
+    // avatar cannot travel on it without breaking its three existing callers.
+    public async Task UpdateAvatar(string avatar)
+    {
+        var participant = participantService.Get(Context.ConnectionId);
+        if (participant is null) return;
+
+        var normalized = NormalizeAvatar(avatar);
+
+        if (!participantService.SetAvatar(Context.ConnectionId, normalized)) return;
+
+        await Clients.Group(participant.RoomId)
+            .SendAsync(SignalREvents.AvatarUpdated, Context.ConnectionId, normalized);
+    }
+
+    // Shape-only whitelist. The avatar catalogue lives in the client; keeping a
+    // copy here would be a third place to keep in sync, so anything that is not a
+    // plausible slug becomes empty and the client derives a default from the name.
+    private static string NormalizeAvatar(string? avatar)
+    {
+        var value = avatar?.Trim() ?? "";
+        return AvatarSlugPattern().IsMatch(value) ? value : "";
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex("^[a-z][a-z0-9-]{0,23}$")]
+    private static partial System.Text.RegularExpressions.Regex AvatarSlugPattern();
 
     private static string Sanitize(string? input, int maxLength = int.MaxValue)
     {

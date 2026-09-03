@@ -9,4 +9,9 @@ public class Participant
     public bool IsDeafened { get; set; }
     public bool IsListenOnly { get; set; }
     public bool IsSharingScreen { get; set; }
+
+    // Opaque avatar slug chosen by the client. The server does not own the
+    // catalogue: it validates shape only, and the client falls back to a
+    // name-derived default for any value it does not recognise.
+    public string Avatar { get; set; } = string.Empty;
 }

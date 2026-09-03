@@ -48,6 +48,7 @@ public class ParticipantServiceTests
         Assert.False(svc.SetMuted(id, true));
         Assert.False(svc.SetDeafened(id, true));
         Assert.False(svc.SetSharingScreen(id, true));
+        Assert.False(svc.SetAvatar(id, "cheerful"));
     }
 
     [Fact]
@@ -65,5 +66,22 @@ public class ParticipantServiceTests
         Assert.True(p.IsMuted);
         Assert.True(p.IsDeafened);
         Assert.True(p.IsSharingScreen);
+    }
+
+    [Fact]
+    public void SetAvatar_StoresValue_AndOverwrites()
+    {
+        var svc = new ParticipantService();
+        var id = Guid.NewGuid().ToString();
+        var p = NewParticipant(id);
+        svc.CreateOrUpdate(p);
+
+        Assert.Equal(string.Empty, p.Avatar);
+
+        Assert.True(svc.SetAvatar(id, "cheerful"));
+        Assert.Equal("cheerful", p.Avatar);
+
+        Assert.True(svc.SetAvatar(id, "drunk"));
+        Assert.Equal("drunk", p.Avatar);
     }
 }
